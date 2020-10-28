@@ -83,3 +83,39 @@ class RadioCheckBoxBuilderDelegate extends CheckBoxBuilderDelegate {
     );
   }
 }
+
+class CustomCheckBoxBuilderDelegate extends CheckBoxBuilderDelegate {
+  Color selectedColor; // 选中的背景色
+  Color unselectedColor; // 未选中的背景色
+
+  CustomCheckBoxBuilderDelegate({
+    this.selectedColor = Colors.black,
+    this.unselectedColor = Colors.white,
+  });
+
+  @override
+  Widget buildCheckBox(
+    BuildContext context,
+    bool checked,
+    int index,
+    Options options,
+    I18nProvider i18nProvider,
+  ) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Padding(
+        padding: const EdgeInsets.only(right: 15.0),
+        child: Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            color: checked ? selectedColor : unselectedColor,
+            border: Border.all(color: checked ? unselectedColor : selectedColor, width: 1),
+            borderRadius: BorderRadius.all(Radius.circular(11)),
+          ),
+          child: Center(child: Icon(Icons.check, size: 16, color: unselectedColor)),
+        ),
+      ),
+    );
+  }
+}

@@ -1,27 +1,22 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:oktoast/oktoast.dart';
 import 'package:photo/photo.dart';
 import 'package:photo_manager/photo_manager.dart';
 
 import './preview.dart';
-import 'icon_text_button.dart';
-import 'picked_example.dart';
 
-void main() => runApp(MyApp());
+void main() => runApp(new MyApp());
 
 class MyApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return OKToast(
-      child: MaterialApp(
-        title: 'Pick Image Demo',
-        theme: ThemeData(
-          primarySwatch: Colors.lime,
-        ),
-        home: MyHomePage(title: 'Pick Image Demo'),
+    return new MaterialApp(
+      title: 'Pick Image Demo',
+      theme: new ThemeData(
+        primarySwatch: Colors.blue,
       ),
+      home: new MyHomePage(title: 'Pick Image Demo'),
     );
   }
 }
@@ -31,15 +26,14 @@ class MyHomePage extends StatefulWidget {
   final String title;
 
   @override
-  _MyHomePageState createState() => _MyHomePageState();
+  _MyHomePageState createState() => new _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> with LoadingDelegate {
   String currentSelected = "";
 
   @override
-  Widget buildBigImageLoading(
-      BuildContext context, AssetEntity entity, Color themeColor) {
+  Widget buildBigImageLoading(BuildContext context, AssetEntity entity, Color themeColor) {
     return Center(
       child: Container(
         width: 50.0,
@@ -52,8 +46,7 @@ class _MyHomePageState extends State<MyHomePage> with LoadingDelegate {
   }
 
   @override
-  Widget buildPreviewLoading(
-      BuildContext context, AssetEntity entity, Color themeColor) {
+  Widget buildPreviewLoading(BuildContext context, AssetEntity entity, Color themeColor) {
     return Center(
       child: Container(
         width: 50.0,
@@ -67,9 +60,9 @@ class _MyHomePageState extends State<MyHomePage> with LoadingDelegate {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
+    return new Scaffold(
+      appBar: new AppBar(
+        title: new Text(widget.title),
         actions: <Widget>[
           FlatButton(
             child: Icon(Icons.image),
@@ -81,49 +74,31 @@ class _MyHomePageState extends State<MyHomePage> with LoadingDelegate {
         child: SingleChildScrollView(
           child: Column(
             children: <Widget>[
-              IconTextButton(
-                icon: Icons.photo,
-                text: "photo",
-                onTap: () => _pickAsset(PickType.onlyImage),
-              ),
-              IconTextButton(
-                icon: Icons.videocam,
-                text: "video",
-                onTap: () => _pickAsset(PickType.onlyVideo),
-              ),
-              IconTextButton(
-                icon: Icons.album,
-                text: "all",
-                onTap: () => _pickAsset(PickType.all),
-              ),
-              IconTextButton(
-                icon: CupertinoIcons.reply_all,
-                text: "Picked asset example.",
-                onTap: () => routePage(PickedExample()),
+              IconTextButton(icon: Icons.photo, text: "photo", onTap: () => _pickAsset(PickType.onlyImage)),
+              IconTextButton(icon: Icons.videocam, text: "video", onTap: () => _pickAsset(PickType.onlyVideo)),
+              IconTextButton(icon: Icons.album, text: "all", onTap: () => _pickAsset(PickType.all)),
+              Text(
+                '$currentSelected',
+                textAlign: TextAlign.center,
               ),
             ],
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: new FloatingActionButton(
         onPressed: () => _pickAsset(PickType.all),
         tooltip: 'pickImage',
-        child: Icon(Icons.add),
+        child: new Icon(Icons.add),
       ),
     );
   }
 
   void _testPhotoListParams() async {
-    var assetPathList =
-        await PhotoManager.getAssetPathList(type: RequestType.image);
+    var assetPathList = await PhotoManager.getImageAsset();
     _pickAsset(PickType.all, pathList: assetPathList);
   }
 
   void _pickAsset(PickType type, {List<AssetPathEntity> pathList}) async {
-    /// context is required, other params is optional.
-    /// context is required, other params is optional.
-    /// context is required, other params is optional.
-
     List<AssetEntity> imgList = await PhotoPicker.pickAsset(
       // BuildContext required
       context: context,
@@ -154,10 +129,9 @@ class _MyHomePageState extends State<MyHomePage> with LoadingDelegate {
       // preview thumb size , default is 64
       sortDelegate: SortDelegate.common,
       // default is common ,or you make custom delegate to sort your gallery
-      checkBoxBuilderDelegate: DefaultCheckBoxBuilderDelegate(
-        activeColor: Colors.white,
-        unselectedColor: Colors.white,
-        checkColor: Colors.green,
+      checkBoxBuilderDelegate: CustomCheckBoxBuilderDelegate(
+        selectedColor: Colors.white,
+        unselectedColor: Colors.green,
       ),
       // default is DefaultCheckBoxBuilderDelegate ,or you make custom delegate to create checkbox
 
@@ -172,9 +146,8 @@ class _MyHomePageState extends State<MyHomePage> with LoadingDelegate {
       photoPathList: pathList,
     );
 
-    if (imgList == null || imgList.isEmpty) {
-      showToast("No pick item.");
-      return;
+    if (imgList == null) {
+      currentSelected = "not select item";
     } else {
       List<String> r = [];
       for (var e in imgList) {
@@ -185,19 +158,28 @@ class _MyHomePageState extends State<MyHomePage> with LoadingDelegate {
 
       List<AssetEntity> preview = [];
       preview.addAll(imgList);
-      Navigator.push(context,
-          MaterialPageRoute(builder: (_) => PreviewPage(list: preview)));
+      Navigator.push(context, MaterialPageRoute(builder: (_) => PreviewPage(list: preview)));
     }
     setState(() {});
   }
+}
 
-  void routePage(Widget widget) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (BuildContext context) {
-          return widget;
-        },
+class IconTextButton extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Function onTap;
+
+  const IconTextButton({Key key, this.icon, this.text, this.onTap}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        child: ListTile(
+          leading: Icon(icon ?? Icons.device_unknown),
+          title: Text(text ?? ""),
+        ),
       ),
     );
   }

@@ -44,6 +44,7 @@ class PhotoPreviewPage extends StatefulWidget {
 
 class _PhotoPreviewPageState extends State<PhotoPreviewPage> {
   PhotoPickerProvider get config => PhotoPickerProvider.of(context);
+
   AssetProvider get assetProvider => widget.assetProvider;
 
   Options get options => config.options;
@@ -145,19 +146,18 @@ class _PhotoPreviewPageState extends State<PhotoPreviewPage> {
             },
           ),
           actions: <Widget>[
-            StreamBuilder(
-              stream: pageStream,
-              builder: (ctx, s) => FlatButton(
-                splashColor: Colors.transparent,
-                onPressed: selectedList.length == 0 ? null : sure,
-                child: Text(
-                  config.provider.getSureText(options, selectedList.length),
-                  style: selectedList.length == 0
-                      ? textStyle.copyWith(color: options.disableColor)
-                      : textStyle,
-                ),
-              ),
-            ),
+            _buildCheckbox(),
+//            StreamBuilder(
+//              stream: pageStream,
+//              builder: (ctx, s) => FlatButton(
+//                splashColor: Colors.transparent,
+//                onPressed: selectedList.length == 0 ? null : sure,
+//                child: Text(
+//                  config.provider.getSureText(options, selectedList.length),
+//                  style: selectedList.length == 0 ? textStyle.copyWith(color: options.disableColor) : textStyle,
+//                ),
+//              ),
+//            ),
           ],
         ),
         body: PageView.builder(
@@ -183,7 +183,18 @@ class _PhotoPreviewPageState extends State<PhotoPreviewPage> {
               Expanded(
                 child: Container(),
               ),
-              _buildCheckbox(),
+              StreamBuilder(
+                stream: pageStream,
+                builder: (ctx, s) => FlatButton(
+                  textColor: options.textColor,
+                  splashColor: Colors.transparent,
+                  disabledTextColor: options.disableColor,
+                  onPressed: selectedList.length == 0 ? null : sure,
+                  child: Text(
+                    config.provider.getSureText(options, selectedList.length),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -272,9 +283,12 @@ class _PhotoPreviewPageState extends State<PhotoPreviewPage> {
     }
 
     var data = list[index];
-    return BigPhotoImage(
-      assetEntity: data,
-      loadingWidget: _buildLoadingWidget(data),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 85),
+      child: BigPhotoImage(
+        assetEntity: data,
+        loadingWidget: _buildLoadingWidget(data),
+      ),
     );
   }
 
@@ -283,8 +297,7 @@ class _PhotoPreviewPageState extends State<PhotoPreviewPage> {
   }
 
   Widget _buildLoadingWidget(AssetEntity entity) {
-    return options.loadingDelegate
-        .buildBigImageLoading(context, entity, themeColor);
+    return options.loadingDelegate.buildBigImageLoading(context, entity, themeColor);
   }
 
   void _onPageChanged(int value) {
@@ -294,29 +307,41 @@ class _PhotoPreviewPageState extends State<PhotoPreviewPage> {
   Widget _buildThumb() {
     return StreamBuilder(
       builder: (ctx, snapshot) => Container(
-        height: 80.0,
-        child: ListView.builder(
-          itemBuilder: _buildThumbItem,
-          itemCount: previewList.length,
-          scrollDirection: Axis.horizontal,
+        height: 85.0,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 15, 10, 10),
+          color: themeColor,
+          child: ListView.builder(
+            itemBuilder: (BuildContext context, int index) {
+              return _buildThumbItem(context, index, snapshot.data ?? 0);
+            },
+            itemCount: previewList.length,
+            scrollDirection: Axis.horizontal,
+          ),
         ),
       ),
       stream: pageStream,
     );
   }
 
-  Widget _buildThumbItem(BuildContext context, int index) {
-    var item = previewList[index];
+  Widget _buildThumbItem(BuildContext context, int index, int current) {
+    var thumbItem = previewList[index];
+    var previewItem = list[current];
+    var checked = thumbItem == previewItem;
     return RepaintBoundary(
       child: GestureDetector(
-        onTap: () => changeSelected(item, index),
+        onTap: () => changeSelected(thumbItem, index),
         child: Container(
-          width: 80.0,
+          width: 60.0,
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          decoration: BoxDecoration(
+            border: Border.all(width: 3, color: checked ? Colors.white : Colors.transparent),
+          ),
           child: Stack(
             children: <Widget>[
               ImageItem(
                 themeColor: themeColor,
-                entity: item,
+                entity: thumbItem,
                 size: options.thumbSize,
                 loadingDelegate: options.loadingDelegate,
               ),
@@ -324,7 +349,7 @@ class _PhotoPreviewPageState extends State<PhotoPreviewPage> {
                 child: StreamBuilder(
                   stream: pageStream,
                   builder: (BuildContext context, AsyncSnapshot snapshot) {
-                    if (selectedList.contains(item)) {
+                    if (selectedList.contains(thumbItem)) {
                       return Container();
                     }
                     return Container(
@@ -364,8 +389,7 @@ class BigPhotoImage extends StatefulWidget {
   _BigPhotoImageState createState() => _BigPhotoImageState();
 }
 
-class _BigPhotoImageState extends State<BigPhotoImage>
-    with AutomaticKeepAliveClientMixin {
+class _BigPhotoImageState extends State<BigPhotoImage> with AutomaticKeepAliveClientMixin {
   Widget get loadingWidget {
     return widget.loadingWidget ?? Container();
   }
@@ -376,8 +400,7 @@ class _BigPhotoImageState extends State<BigPhotoImage>
     var width = MediaQuery.of(context).size.width;
     var height = MediaQuery.of(context).size.height;
     return FutureBuilder(
-      future:
-          widget.assetEntity.thumbDataWithSize(width.floor(), height.floor()),
+      future: widget.assetEntity.thumbDataWithSize(width.floor(), height.floor()),
       builder: (BuildContext context, AsyncSnapshot<Uint8List> snapshot) {
         var file = snapshot.data;
         if (snapshot.connectionState == ConnectionState.done && file != null) {

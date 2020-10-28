@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:photo/src/delegate/badge_delegate.dart';
 import 'package:photo/src/delegate/loading_delegate.dart';
@@ -36,12 +38,12 @@ class PhotoMainPage extends StatefulWidget {
 }
 
 class _PhotoMainPageState extends State<PhotoMainPage>
-    with SelectedProvider, GalleryListProvider {
+    with SelectedProvider, GalleryListProvider, TickerProviderStateMixin {
   Options get options => widget.options;
 
   I18nProvider get i18nProvider => PhotoPickerProvider.of(context).provider;
-  AssetProvider get assetProvider =>
-      PhotoPickerProvider.of(context).assetProvider;
+
+  AssetProvider get assetProvider => PhotoPickerProvider.of(context).assetProvider;
 
   List<AssetEntity> get list => assetProvider.data;
 
@@ -63,10 +65,11 @@ class _PhotoMainPageState extends State<PhotoMainPage>
   }
 
   String get currentGalleryName {
-    if (currentPath?.isAll == true) {
-      return i18nProvider.getAllGalleryText(options);
+    if (assetProvider.current?.name == null) {
+      return '选择相册';
+    } else {
+      return assetProvider.current.name;
     }
-    return currentPath?.name ?? "Select Folder";
   }
 
   GlobalKey scaffoldKey;
@@ -78,24 +81,26 @@ class _PhotoMainPageState extends State<PhotoMainPage>
 
   Throttle _changeThrottle;
 
+  AnimationController _animationController;
+  Animation<double> _animation;
+  CurvedAnimation _curveAnimation;
+
   @override
   void initState() {
     super.initState();
+    _refreshList();
     scaffoldKey = GlobalKey();
     scrollController = ScrollController();
     _changeThrottle = Throttle(onCall: _onAssetChange);
     PhotoManager.addChangeCallback(_changeThrottle.call);
     PhotoManager.startChangeNotify();
-  }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_isInit) {
-      final pickedList = PhotoPickerProvider.of(context).pickedAssetList ?? [];
-      addPickedAsset(pickedList.toList());
-      _refreshList();
-    }
+    _animationController = AnimationController(duration: const Duration(milliseconds: 300), vsync: this);
+    _curveAnimation = CurvedAnimation(parent: _animationController, curve: Curves.linear);
+    _animation = Tween(begin: 0.0, end: 1.0).animate(_animationController);
+    _animation.addListener(() {
+      setState(() {});
+    });
   }
 
   @override
@@ -119,6 +124,7 @@ class _PhotoMainPageState extends State<PhotoMainPage>
         style: textStyle,
         child: Scaffold(
           appBar: AppBar(
+            centerTitle: true,
             leading: IconButton(
               icon: Icon(
                 Icons.close,
@@ -126,24 +132,28 @@ class _PhotoMainPageState extends State<PhotoMainPage>
               ),
               onPressed: _cancel,
             ),
-            title: Text(
-              i18nProvider.getTitleText(options),
-              style: TextStyle(
-                color: options.textColor,
+            title: GestureDetector(
+              child: Wrap(
+                spacing: 5,
+                children: <Widget>[
+                  Text(
+                    currentGalleryName,
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: options.textColor,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3.0),
+                    child: Transform.rotate(
+                      angle: pi * _curveAnimation.value,
+                      child: Icon(Icons.keyboard_arrow_down, size: 18),
+                    ),
+                  ),
+                ],
               ),
+              onTap: _showGallerySelectDialog,
             ),
-            actions: <Widget>[
-              FlatButton(
-                splashColor: Colors.transparent,
-                child: Text(
-                  i18nProvider.getSureText(options, selectedCount),
-                  style: selectedCount == 0
-                      ? textStyle.copyWith(color: options.disableColor)
-                      : textStyle,
-                ),
-                onPressed: selectedCount == 0 ? null : sure,
-              ),
-            ],
           ),
           body: _buildBody(),
           bottomNavigationBar: _BottomWidget(
@@ -155,10 +165,27 @@ class _PhotoMainPageState extends State<PhotoMainPage>
             onTapPreview: selectedList.isEmpty ? null : _onTapPreview,
             selectedProvider: this,
             galleryListProvider: this,
+            onTapComfirm: sure,
           ),
         ),
       ),
     );
+  }
+
+  /// 选择相册文件夹
+  void _showGallerySelectDialog() async {
+    _animationController.forward();
+    var result = await showModalBottomSheet(
+      context: context,
+      builder: (ctx) => ChangeGalleryDialog(
+        galleryList: galleryPathList,
+        i18n: i18nProvider,
+        options: options,
+      ),
+    );
+
+    _animationController.reverse();
+    if (result != null) _onGalleryChange.call(result);
   }
 
   void _cancel() {
@@ -196,8 +223,7 @@ class _PhotoMainPageState extends State<PhotoMainPage>
     );
   }
 
-  void _refreshList() async {
-    await Future.delayed(Duration.zero);
+  void _refreshList() {
     if (!useAlbum) {
       _refreshListFromWidget();
       return;
@@ -207,27 +233,30 @@ class _PhotoMainPageState extends State<PhotoMainPage>
   }
 
   Future<void> _refreshListFromWidget() async {
-    _onRefreshAssetPathList(widget.photoList);
+    galleryPathList.clear();
+    galleryPathList.addAll(widget.photoList);
+    this.list.clear();
+    var assetList = await galleryPathList[0].assetList;
+    _sortAssetList(assetList);
+    this.list.addAll(assetList);
+    setState(() {
+      _isInit = true;
+    });
   }
 
   Future<void> _refreshListFromGallery() async {
     List<AssetPathEntity> pathList;
     switch (options.pickType) {
       case PickType.onlyImage:
-        pathList = await PhotoManager.getAssetPathList(type: RequestType.image);
+        pathList = await PhotoManager.getImageAsset();
         break;
       case PickType.onlyVideo:
-        pathList = await PhotoManager.getAssetPathList(type: RequestType.image);
+        pathList = await PhotoManager.getVideoAsset();
         break;
       default:
-        pathList = await PhotoManager.getAssetPathList(
-            type: RequestType.image | RequestType.video);
+        pathList = await PhotoManager.getAssetPathList();
     }
 
-    _onRefreshAssetPathList(pathList);
-  }
-
-  Future<void> _onRefreshAssetPathList(List<AssetPathEntity> pathList) async {
     if (pathList == null) {
       return;
     }
@@ -238,19 +267,18 @@ class _PhotoMainPageState extends State<PhotoMainPage>
     galleryPathList.addAll(pathList);
 
     if (pathList.isNotEmpty) {
-      assetProvider.current = pathList[0];
+      currentPath = pathList[0];
+      assetProvider.current = currentPath;
       await assetProvider.loadMore();
-    }
-
-    for (var path in pathList) {
-      if (path.isAll) {
-        path.name = i18nProvider.getAllGalleryText(options);
-      }
     }
 
     setState(() {
       _isInit = true;
     });
+  }
+
+  void _sortAssetList(List<AssetEntity> assetList) {
+    options?.sortDelegate?.assetDelegate?.sort(assetList);
   }
 
   Widget _buildBody() {
@@ -281,7 +309,12 @@ class _PhotoMainPageState extends State<PhotoMainPage>
   Widget _buildItem(BuildContext context, int index) {
     final noMore = assetProvider.noMore;
     if (!noMore && index == assetProvider.count) {
-      _loadMore();
+      if (currentPath == null) {
+        _onGalleryChange(this.galleryPathList[0]);
+      } else {
+        assetProvider.current = currentPath;
+        _loadMore();
+      }
       return _buildLoading();
     }
 
@@ -339,6 +372,8 @@ class _PhotoMainPageState extends State<PhotoMainPage>
   Widget _buildText(AssetEntity entity) {
     var isSelected = containsEntity(entity);
     Widget child;
+    Color bgColor = const Color(0x33000000);
+    Color borderColor = Colors.white;
     BoxDecoration decoration;
     if (isSelected) {
       child = Text(
@@ -346,18 +381,27 @@ class _PhotoMainPageState extends State<PhotoMainPage>
         textAlign: TextAlign.center,
         style: TextStyle(
           fontSize: 12.0,
+          fontWeight: FontWeight.bold,
           color: options.textColor,
         ),
       );
-      decoration = BoxDecoration(color: themeColor);
-    } else {
-      decoration = BoxDecoration(
-        borderRadius: BorderRadius.circular(1.0),
-        border: Border.all(
-          color: themeColor,
-        ),
-      );
+      bgColor = themeColor;
+      borderColor = themeColor;
+//      decoration = BoxDecoration(color: themeColor);
+//    } else {
+//      decoration = BoxDecoration(
+//        borderRadius: BorderRadius.circular(1.0),
+//        border: Border.all(
+//          color: themeColor,
+//        ),
+//      );
+
     }
+    decoration = BoxDecoration(
+      color: bgColor,
+      borderRadius: BorderRadius.circular(18.0),
+      border: Border.all(color: borderColor, width: 2),
+    );
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: AnimatedContainer(
@@ -389,7 +433,8 @@ class _PhotoMainPageState extends State<PhotoMainPage>
     //   await checkPickImageEntity();
     //   setState(() {});
     // });
-    if (assetPathEntity != assetProvider.current) {
+    if (assetPathEntity != currentPath) {
+      currentPath = assetPathEntity;
       assetProvider.current = assetPathEntity;
       await assetProvider.loadMore();
       setState(() {});
@@ -397,7 +442,7 @@ class _PhotoMainPageState extends State<PhotoMainPage>
   }
 
   void _onItemClick(AssetEntity data, int index) {
-    var result = PhotoPreviewResult();
+    var result = new PhotoPreviewResult();
     isPushed = true;
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -417,18 +462,21 @@ class _PhotoMainPageState extends State<PhotoMainPage>
           );
         },
       ),
-    ).then((v) {
-      if (handlePreviewResult(v)) {
-        Navigator.pop(context, v);
-        return;
-      }
-      isPushed = false;
-      setState(() {});
-    });
+    ).then((v) => _onPreviewPop(v, result, true));
+  }
+
+  void _onPreviewPop(List<AssetEntity> v, PhotoPreviewResult result, bool isAll) {
+    if (handlePreviewResult(v)) {
+      Navigator.pop(context, v);
+      return;
+    }
+    isPushed = false;
+    compareAndRemoveEntities(result.previewSelectedList, isAll);
+    setState(() {});
   }
 
   void _onTapPreview() async {
-    var result = PhotoPreviewResult();
+    var result = new PhotoPreviewResult();
     isPushed = true;
     var v = await Navigator.of(context).push(
       MaterialPageRoute(
@@ -446,13 +494,7 @@ class _PhotoMainPageState extends State<PhotoMainPage>
         ),
       ),
     );
-    if (handlePreviewResult(v)) {
-      // print(v);
-      Navigator.pop(context, v);
-      return;
-    }
-    isPushed = false;
-    compareAndRemoveEntities(result.previewSelectedList);
+    _onPreviewPop(v, result, false);
   }
 
   bool handlePreviewResult(List<AssetEntity> v) {
@@ -469,14 +511,7 @@ class _PhotoMainPageState extends State<PhotoMainPage>
     return Center(
       child: Column(
         children: <Widget>[
-          Container(
-            width: 40.0,
-            height: 40.0,
-            padding: const EdgeInsets.all(5.0),
-            child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation(themeColor),
-            ),
-          ),
+          CupertinoActivityIndicator(),
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Text(
@@ -503,10 +538,10 @@ class _PhotoMainPageState extends State<PhotoMainPage>
     List<AssetPathEntity> pathList;
     switch (options.pickType) {
       case PickType.onlyImage:
-        pathList = await PhotoManager.getAssetPathList(type: RequestType.image);
+        pathList = await PhotoManager.getImageAsset();
         break;
       case PickType.onlyVideo:
-        pathList = await PhotoManager.getAssetPathList(type: RequestType.image);
+        pathList = await PhotoManager.getVideoAsset();
         break;
       default:
         pathList = await PhotoManager.getAssetPathList();
